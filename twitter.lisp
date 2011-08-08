@@ -1,16 +1,30 @@
+;;Comments for Schell!
+;;Embeds a secret message according to a set of predefined keys in a tweet selected from a pool.
+;;requires cl-twitter.
+;;First, build your tweet pool with (get-search-results (list "#searchforthiskeyword" "#andthisonetoo")), populates *big-list*
+;;Second, build codes with (defparameter *code-list* (make-codes 21 (list 1 2 3 ... 63) 0).  
+;;Makes 21 codes (optimal), 3 characters positions per code, of the first 63.
+;;Third, embedd your message (encode-message *big-list* *code-list* "Hello World" 3 T)
+;;If you want to extract the message, feed any of the outputted embedding tweets into (multi-unencode tweets *code-list*)
+;;cl-twitter also provides tweeting.
+
+
 (defparameter *hash-results* nil)
-(defparameter *big-list* nil )
+(defparameter *big-list* nil ) ;;This is the pool of tweets.
 (defparameter *average-tweet-length* 0)
 (defparameter *average-characters* 0)
 
+;;An list of pairs, first element of pair is the alphabetic character, second is an integer.  e.g.(#\A 3)
 (defun make-assoc-list ()
   (let ((list-out))
     (dotimes (i 26)
       (push (list (code-char (+ 65 i)) 0) list-out))
     (reverse list-out)))
 
+;;Creates a hash table from the list above.
 (defparameter *alphabet-hash-table* (make-hash-table :initial-contents (make-assoc-list) :test 'equal :size 26))
 
+;;Returns decapitalized string, non-destructive.
 (defun decapitalize-string (the-string)
   (let ((string-out the-string))
     (dotimes (i (length the-string))
@@ -19,6 +33,7 @@
 	    (setf (elt string-out i) (code-char (+ 32 curr-val))))))
     string-out))
 
+;;Returns a hash table of alphabetic letter distributions, from an inputted hash-table of tweets (*big-list*).  Relative option returns percentage.
 (defun letter-distribution (the-list &optional relative)
   (let ((alphabet-hash-table (make-hash-table :test 'equal :size 26)))
     (dotimes (i (length the-list))
@@ -33,6 +48,7 @@
 	  (maphash #'(lambda (key value) (setf (gethash key alphabet-hash-table) (float (* 100 (/ value total-count))))) alphabet-hash-table)))
     alphabet-hash-table))
 
+;;Returns a hash table of alphabetic character length of tweets, from an inputted hash-table of tweets (*big-list*).  Relative option returns percentage.
 (defun char-length-distribution (the-list &optional relative)
   (let ((char-length-hash (make-hash-table :test 'eql)))
     (dotimes (i (length the-list))
@@ -46,10 +62,12 @@
 	  (print total-count)
 	  (maphash #'(lambda (key value) (setf (gethash key char-length-hash) (float (* 100 (/ value total-count))))) char-length-hash)))
     char-length-hash))
-       
+
+;;Prints a readable entry from hash-table.       
 (defun print-hash-table-entry (key value)
   (format t "~{~,5f ~} " (list key value)))
 
+;;Prints whole hash-table.
 (defun print-hash-table (the-hash-table)
   (maphash #'print-hash-table-entry the-hash-table))
 
@@ -73,12 +91,14 @@
 		(format t "~a " i))
 	    (format t "~a " 0))))))
 
+;;Given a string of letter, and an alphabetic character distribution, returns chance of embedding in a single random tweet.
 (defun word-chance (the-word letter-distribution)
   (let ((chance-out 1))
     (dotimes (i (length the-word))
       (setf chance-out (* chance-out (/ (gethash (elt the-word i) letter-distribution) 100))))
     chance-out))
 
+;;Chance of embedding a string, given a pool of n tweets, using m codes and a letter distribution.
 (defun encode-prob(word n-tweets m-codes letter-distribution)
   (- 1 (expt (- 1 (word-chance word letter-distribution)) (* n-tweets m-codes))))
   
@@ -89,6 +109,7 @@
 (defun sqr (x)
   (* x x))
 
+;;Populates *big-list* with tweets found from search string list. i.e. (list "#lolz" "#kittenmittens")
 (defun get-search-results (search-string-list)
   (let ((temp-hash-results ))
     (if (not *big-list*)
@@ -123,6 +144,7 @@
     ((and (not (typep thing2 'integer)) (typep thing1 'integer)) (append thing2 (list thing1)))
     ((and (not (typep thing2 'integer)) (not (typep thing1 'integer))) (concatenate 'list thing1 thing2))))
 
+;;Tests if x is an element in the-list
 (defun elementp (the-list x)
   (if (integerp the-list)
       (if (= the-list x)
@@ -133,6 +155,7 @@
 	(return-from elementp T)))
   nil)
 
+;;Returns permutations of two lists.
 (defun permute-lists (list1 list2)
   (let ((output-list ) (temp-element))
     (dotimes (i (length list1))
@@ -143,6 +166,7 @@
 	      (push temp-element output-list)))))
     (return-from permute-lists output-list)))
 
+;;Returns a list of n codes, given a list of elements in num-list.  max-overlap weeds out permutations that are too similar.
 (defun make-codes (n num-list &optional max-overlap)
   (let ((code-list num-list))
     (dotimes (i (- n 1))
@@ -151,6 +175,7 @@
 	(return-from make-codes (remove-overlap code-list max-overlap))
 	(return-from make-codes code-list))))
 
+;;Tests if two lists are permutations of each other. 
 (defun combination-compare (combo1 combo2)
   (if (>= (length combo1) (length combo2))
       (dotimes (i (length combo1))
@@ -161,6 +186,7 @@
 	    (return-from combination-compare nil))))
   T)
 
+;;Returns most common character in the tweets of input list (*big-list*).
 (defun mode (the-list)
   (let ((the-hash (make-hash-table )) (freq 0) (the-mode ))
     (dotimes (j (length the-list))
@@ -170,7 +196,7 @@
     (maphash #'(lambda (key value) (if (> value freq) (progn (setf the-mode key) (setf freq value)))) the-hash)
     the-mode))
     
-
+;;Non-destructive, returns new list without the elements specified in index-list.
 (defun remove-element-by-index (the-list index-list)
   (let ((out-list ))
     (dotimes (j (length the-list))
@@ -178,7 +204,7 @@
 	  (push (elt the-list j) out-list)))
     (reverse out-list)))
 
-  
+ ;;Non-destructive, returns list with elements removed that overlap by specified amount.
 (defun remove-overlap (the-list overlap)
   (let ((output-list (list )) (duplist (list )))
     (dotimes (i (length the-list))
@@ -192,15 +218,9 @@
 	(progn
 	  (setf output-list (remove-element-by-index the-list (list (mode duplist))))
 	  (setf output-list (remove-overlap output-list overlap))))
-    output-list))
-    
-   
-	
+    output-list))     
 	      
-     
-
-	      
-
+;;Returns how many characters two lists have in common.
 (defun combination-compare2 (combo1 combo2)
   (let ((count 0))
     (if (>= (length combo1) (length combo2))
@@ -211,7 +231,8 @@
 	  (if (elementp combo1 (elt combo2 i))
 	      (setf count (+ count 1)))))
     count))
-    
+   
+;;Returns maximum element from a list. 
 (defun max-element (the-list)
   (let ((the-max (elt the-list 0)))
     (dotimes (i (- (length the-list) 1))
@@ -219,14 +240,17 @@
       (if (> temp-max the-max)
 	  (setf the-max temp-max))))
     (return-from max-element the-max)))
-      
+
+;;Removes whitespace characters from a string.
 (defun remove-whitespace (string)
   (remove-if #'(lambda (x) (char= #\Space x)) string))
 
+;;Tests if a character is in the english alphabet.
 (defun eng-alpha-char-p (c)
   (or (and (>= (char-code c) 65) (<= (char-code c) 90))
       (and (>= (char-code c) 97) (<= (char-code c) 122))))
-	  
+
+;;Non-destructive, returns string without non-english alphabetic characters.
 (defun remove-non-letters (string)
   (remove-if #'(lambda (x) (not (eng-alpha-char-p x))) string))
 
@@ -238,6 +262,8 @@
 	(return-from caseless-string-eql nil)))
   T)
 
+;;Given a list of tweets, a list of keys, a message, how many embedding tweets you'd like, and the option of just the embedding tweets.
+;;e.g (encode-message *big-list* '('(1 2 3) '(4 7 8) '(5 3 5)...) "Hello World" 4 nil)
 (defun encode-message (the-list code-list message n-returns &optional just-tweets)
   (let ((encodes ))
     (block outer
@@ -267,18 +293,21 @@
 	    (return-from outer))))
     encodes))
 
+;;Given any tweet, and a single code, returns the unembedding.
 (defun unencode-message (tweet code)
   (let ((msg ) (alpha-tweet (remove-non-letters tweet)))
     (dotimes (i (length code))
       (push (elt alpha-tweet (elt code i)) msg))
     (concatenate 'string (reverse msg))))
 
+;;Given a single tweet and multiple codes, returns all possible unembeddings.
 (defun mass-unencode (tweet code-list)
   (let ((message-list ))
     (dotimes (i (length code-list))
       (push (unencode-message tweet (elt code-list i)) message-list))
     message-list))
 
+;;Returns a list of all characters of list1 that are also in list2.
 (defun compare-lists (list1 list2)
   (let ((list-out))
     (dotimes (i (length list1))
@@ -287,6 +316,7 @@
 	    (push (elt list1 i) list-out))))
     list-out))
 
+;;Returns list of elements that are common to all lists inputted.
 (defun compare-multi-lists (list-of-lists)
   (if (= (length list-of-lists) 1)
       (remove-duplicates (elt list-of-lists 0) :test #'caseless-string-eql)
@@ -295,7 +325,8 @@
 	  (dotimes (i (- (length list-of-lists) 1))
 	    (push (remove-duplicates (compare-lists (elt list-of-lists i) (elt list-of-lists (+ i 1))) :test #'caseless-string-eql) temp-duplicates))
 	  (compare-multi-lists temp-duplicates)))))
-	      
+
+;;First, gets all possible unembeddings for every tweet with every key, then gets the string common to all.  	      
 (defun multi-unencode (tweet-list code-list)
   (let ((decode-list ))
     (dotimes (i (length tweet-list))
